@@ -49,6 +49,9 @@ export function* submitEnabledCurrenciesUpdate( currencies ) {
 	const addedCurrencies = currencies.filter(
 		( currency ) => ! enabledCurrencies.includes( currency )
 	);
+	const removedCurrencies = enabledCurrencies.filter(
+		( currency ) => ! currencies.includes( currency )
+	);
 
 	try {
 		const result = yield apiFetch( {
@@ -66,8 +69,11 @@ export function* submitEnabledCurrenciesUpdate( currencies ) {
 		);
 
 		wcpayTracks.recordEvent(
-			wcpayTracks.events.MULTI_CURRENCY_CURRENCIES_ADDED,
-			{ added_currencies: addedCurrencies }
+			wcpayTracks.events.MULTI_CURRENCY_ENABLED_CURRENCIES_UPDATED,
+			{
+				added_currencies: addedCurrencies,
+				removed_currencies: removedCurrencies,
+			}
 		);
 	} catch ( e ) {
 		yield dispatch( 'core/notices' ).createErrorNotice(
