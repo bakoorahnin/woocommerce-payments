@@ -112,6 +112,20 @@ class WC_Payments_Product_Service {
 	}
 
 	/**
+	 * Gets the Stripe product ID associated with a WC item.
+	 *
+	 * @param string $type The item type to create a product for.
+	 * return string       The item's Stripe product id.
+	 */
+	public function get_stripe_product_id_for_item( string $type ) : string {
+		if ( ! get_option( self::PRODUCT_ID_KEY . '_' . $type ) ) {
+			$this->create_product_for_item_type( $type );
+		}
+
+		return get_option( self::PRODUCT_ID_KEY . '_' . $type );
+	}
+
+	/**
 	 * Gets the Stripe product ID associated with a WC product.
 	 *
 	 * @param WC_Product $product The product to get the Stripe ID for.
@@ -188,6 +202,26 @@ class WC_Payments_Product_Service {
 			$this->set_stripe_price_hash( $product, $this->get_price_hash( $product ) );
 			$this->set_stripe_price_id( $product, $stripe_product['stripe_price_id'] );
 			$this->add_product_update_listeners();
+		} catch ( API_Exception $e ) {
+			Logger::log( 'There was a problem creating the product in Stripe: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Create a generic item product in Stripe.
+	 *
+	 * @param string $type The item type to create a product for.
+	 */
+	public function create_product_for_item_type( string $type ) {
+		try {
+			$stripe_product = $this->payments_api_client->create_product(
+				[
+					'description' => 'N/A',
+					'name'        => ucfirst( $type ),
+				]
+			);
+
+			update_option( self::PRODUCT_ID_KEY . '_' . $type, $stripe_product['stripe_product_id'] );
 		} catch ( API_Exception $e ) {
 			Logger::log( 'There was a problem creating the product in Stripe: ' . $e->getMessage() );
 		}
@@ -348,69 +382,6 @@ class WC_Payments_Product_Service {
 	private function remove_product_update_listeners() {
 		remove_action( 'woocommerce_update_product_variation', [ $this, 'maybe_schedule_product_create_or_update' ], 10 );
 		remove_action( 'woocommerce_update_product', [ $this, 'maybe_schedule_product_create_or_update' ], 10 );
-	}
-
-	/**
-	 * Gets product data from a subscription needed to create a WCPay subscription.
-	 *
-	 * @param WC_Subscription $subscription The WC subscription to fetch product data from.
-	 *
-	 * @return array|null WCPay Product data or null on error.
-	 */
-	public function get_product_data_for_subscription( WC_Subscription $subscription ) {
-		$product_data = [];
-
-		foreach ( $subscription->get_items() as $item ) {
-			$product = $item->get_product();
-
-			if ( ! WC_Subscriptions_Product::is_subscription( $product ) ) {
-				continue;
-			}
-
-			$product_data[] = [
-				'price'     => $this->get_stripe_price_id( $product ),
-				'quantity'  => $item->get_quantity(),
-				'tax_rates' => $this->get_tax_rates_for_item( $item, $subscription ),
-			];
-		}
-
-		return $product_data;
-	}
-
-	/**
-	 * Prepare tax rates for a subscription item.
-	 *
-	 * @param WC_Order_Item   $item         Subscription order item.
-	 * @param WC_Subscription $subscription A Subscription to get tax rate information from.
-	 *
-	 * @return array
-	 */
-	public function get_tax_rates_for_item( WC_Order_Item $item, WC_Subscription $subscription ) {
-		$tax_rates = [];
-
-		if ( ! wc_tax_enabled() || ! $item->get_taxes() ) {
-			return $tax_rates;
-		}
-
-		$tax_rate_ids = array_keys( $item->get_taxes()['total'] );
-
-		if ( ! $tax_rate_ids ) {
-			return $tax_rates;
-		}
-
-		$tax_inclusive = wc_prices_include_tax();
-
-		foreach ( $subscription->get_taxes() as $tax ) {
-			if ( in_array( $tax->get_rate_id(), $tax_rate_ids, true ) ) {
-				$tax_rates[] = [
-					'display_name' => $tax->get_name(),
-					'inclusive'    => $tax_inclusive,
-					'percentage'   => $tax->get_rate_percent(),
-				];
-			}
-		}
-
-		return $tax_rates;
 	}
 
 	/**
