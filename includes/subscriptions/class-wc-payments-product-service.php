@@ -107,7 +107,7 @@ class WC_Payments_Product_Service {
 	 * @param WC_Product $product The product to get the Stripe price ID for.
 	 * @return string             The product's Stripe price ID or an empty string.
 	 */
-	public static function get_stripe_price_id( WC_Product $product ) : string {
+	public function get_stripe_price_id( WC_Product $product ) : string {
 		return $product->get_meta( self::PRICE_ID_KEY, true );
 	}
 
